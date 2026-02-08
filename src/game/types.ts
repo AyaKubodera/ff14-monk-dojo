@@ -7,19 +7,19 @@ export interface Skill {
   name: string;
   nameJa: string;
   type: SkillType;
-  form?: Form;        // GCDs belong to a form
-  position?: Position; // positional requirement (GCDs only)
+  form?: Form;
+  position?: Position;
   potency: number;
-  positionalBonus: number; // extra potency if positional is correct
-  icon: string;        // emoji or text icon
-  color: string;       // skill button color
+  positionalBonus: number;
+  icon: string;
+  color: string;
   description: string;
 }
 
 export interface RotationStep {
   skillId: string;
   isOgcd: boolean;
-  hint?: string;       // coaching hint shown to player
+  hint?: string;
 }
 
 export interface Course {
@@ -29,28 +29,35 @@ export interface Course {
   description: string;
   descriptionJa: string;
   icon: string;
-  difficulty: number;  // 1-5
+  difficulty: number;
   rotation: RotationStep[];
-  loopFrom?: number;   // index to loop back to for repeating rotations
 }
 
-export interface StepResult {
+export type Timing = 'perfect' | 'great' | 'good' | 'miss';
+
+export interface NoteResult {
   skillId: string;
+  timing: Timing;
   positionCorrect: boolean;
-  skillCorrect: boolean;
-  timing: 'perfect' | 'great' | 'good' | 'miss';
   score: number;
-  potency: number;
 }
 
+/** Runtime state for the rhythm game */
 export interface GameState {
   course: Course;
-  currentStep: number;
+  /** Currently active note index (next to hit) */
+  activeNote: number;
   score: number;
   combo: number;
   maxCombo: number;
-  results: StepResult[];
-  playerPosition: Position | null;
-  phase: 'position' | 'skill' | 'ogcd' | 'result' | 'finished';
-  totalSteps: number;
+  results: NoteResult[];
+  /** Player's current position (flank or rear) */
+  playerPosition: Position;
+  /** Is the game running? */
+  running: boolean;
+  /** Timestamp when game started */
+  startTime: number;
+  /** BPM-like: ms per note */
+  noteInterval: number;
+  totalNotes: number;
 }

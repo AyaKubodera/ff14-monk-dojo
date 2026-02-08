@@ -1,148 +1,161 @@
-import type { GameState, Course, StepResult, Position } from './types';
+import type { GameState, Course, NoteResult, Timing, Position } from './types';
 import { allSkills } from './skills';
 
+const NOTE_INTERVAL_MS = 1800; // time between notes
+const PERFECT_WINDOW = 80;  // ±ms
+const GREAT_WINDOW = 160;
+const GOOD_WINDOW = 280;
+
 export function createGameState(course: Course): GameState {
-  const firstStep = course.rotation[0];
-  const firstSkill = allSkills[firstStep.skillId];
   return {
     course,
-    currentStep: 0,
+    activeNote: 0,
     score: 0,
     combo: 0,
     maxCombo: 0,
     results: [],
-    playerPosition: null,
-    phase: getPhaseForStep(firstStep, firstSkill),
-    totalSteps: course.rotation.length,
+    playerPosition: 'rear',
+    running: false,
+    startTime: 0,
+    noteInterval: NOTE_INTERVAL_MS,
+    totalNotes: course.rotation.length,
   };
 }
 
-function getPhaseForStep(step: { skillId: string; isOgcd: boolean }, skill: { position?: Position }): GameState['phase'] {
-  if (step.isOgcd) return 'ogcd';
-  if (skill.position) return 'position';
-  return 'skill'; // GCD without positional → skip position selection
+/** Returns the ideal hit time for a given note index */
+export function noteHitTime(state: GameState, index: number): number {
+  // First note at 2s, then every noteInterval
+  return state.startTime + 2000 + index * state.noteInterval;
 }
 
-export function getCurrentStep(state: GameState) {
-  if (state.currentStep >= state.course.rotation.length) return null;
-  const step = state.course.rotation[state.currentStep];
+/** How far along (0..1) a note is in its travel. 1 = at hit line. >1 = past. */
+export function noteProgress(state: GameState, index: number, now: number): number {
+  const hitTime = noteHitTime(state, index);
+  const travelDuration = state.noteInterval * 3; // notes visible for 3 beats
+  const elapsed = now - (hitTime - travelDuration);
+  return elapsed / travelDuration;
+}
+
+/** Judge timing based on how close the tap is to the ideal hit time */
+export function judgeTiming(state: GameState, noteIndex: number, now: number): Timing {
+  const hitTime = noteHitTime(state, noteIndex);
+  const diff = Math.abs(now - hitTime);
+  if (diff <= PERFECT_WINDOW) return 'perfect';
+  if (diff <= GREAT_WINDOW) return 'great';
+  if (diff <= GOOD_WINDOW) return 'good';
+  return 'miss';
+}
+
+/** Check if a note has been missed (passed too far) */
+export function isNoteMissed(state: GameState, noteIndex: number, now: number): boolean {
+  const hitTime = noteHitTime(state, noteIndex);
+  return now > hitTime + GOOD_WINDOW + 50;
+}
+
+/** Process a tap on a skill */
+export function tapSkill(state: GameState, skillId: string, now: number): { state: GameState; result: NoteResult | null } {
+  if (!state.running || state.activeNote >= state.totalNotes) {
+    return { state, result: null };
+  }
+
+  const step = state.course.rotation[state.activeNote];
   const skill = allSkills[step.skillId];
-  return { step, skill };
-}
+  const timing = judgeTiming(state, state.activeNote, now);
 
-export function setPlayerPosition(state: GameState, position: Position): GameState {
-  if (state.phase !== 'position') return state;
-  return {
-    ...state,
-    playerPosition: position,
-    phase: 'skill',
-  };
-}
-
-export function executeSkill(state: GameState, skillId: string): GameState {
-  const current = getCurrentStep(state);
-  if (!current) return { ...state, phase: 'finished' };
-
-  const { step, skill } = current;
-  const isOgcd = step.isOgcd;
-
-  // Check if player is in correct phase
-  if (isOgcd && state.phase !== 'ogcd') return state;
-  if (!isOgcd && state.phase !== 'skill') return state;
-
+  // Wrong skill = miss
   const skillCorrect = skillId === step.skillId;
+  const finalTiming: Timing = skillCorrect ? timing : 'miss';
+
+  // Positional check
   let positionCorrect = true;
-  let potency = 0;
-
-  if (!isOgcd && skill.position) {
+  if (skill.position) {
     positionCorrect = state.playerPosition === skill.position;
-    potency = skill.potency + (positionCorrect ? skill.positionalBonus : 0);
-  } else {
-    potency = skill.potency;
   }
 
-  // Calculate timing rating based on correctness
-  let timing: StepResult['timing'];
-  if (skillCorrect && positionCorrect) {
-    timing = 'perfect';
-  } else if (skillCorrect) {
-    timing = 'great';
-  } else {
-    timing = 'miss';
-  }
+  // Score
+  let score = 0;
+  if (finalTiming === 'perfect') score = positionCorrect ? 1000 : 700;
+  else if (finalTiming === 'great') score = positionCorrect ? 800 : 550;
+  else if (finalTiming === 'good') score = positionCorrect ? 500 : 350;
 
-  // Score calculation
-  let stepScore = 0;
-  if (timing === 'perfect') {
-    stepScore = 1000;
-  } else if (timing === 'great') {
-    stepScore = 600;
-  }
+  const newCombo = finalTiming !== 'miss' ? state.combo + 1 : 0;
+  const comboBonus = 1 + Math.min(newCombo, 30) * 0.05;
+  score = Math.floor(score * comboBonus);
 
-  // Combo multiplier
-  const newCombo = timing !== 'miss' ? state.combo + 1 : 0;
-  const comboMultiplier = 1 + Math.min(newCombo, 20) * 0.1;
-  stepScore = Math.floor(stepScore * comboMultiplier);
-
-  const result: StepResult = {
+  const result: NoteResult = {
     skillId: skillCorrect ? step.skillId : skillId,
+    timing: finalTiming,
     positionCorrect,
-    skillCorrect,
-    timing,
-    score: stepScore,
-    potency,
+    score,
   };
-
-  const nextStepIndex = state.currentStep + 1;
-  const isFinished = nextStepIndex >= state.course.rotation.length;
-
-  let nextPhase: GameState['phase'];
-  if (isFinished) {
-    nextPhase = 'finished';
-  } else {
-    const nextStep = state.course.rotation[nextStepIndex];
-    const nextSkill = allSkills[nextStep.skillId];
-    nextPhase = getPhaseForStep(nextStep, nextSkill);
-  }
 
   return {
-    ...state,
-    currentStep: nextStepIndex,
-    score: state.score + stepScore,
-    combo: newCombo,
-    maxCombo: Math.max(state.maxCombo, newCombo),
-    results: [...state.results, result],
-    playerPosition: null,
-    phase: nextPhase,
+    state: {
+      ...state,
+      activeNote: state.activeNote + 1,
+      score: state.score + score,
+      combo: newCombo,
+      maxCombo: Math.max(state.maxCombo, newCombo),
+      results: [...state.results, result],
+    },
+    result,
   };
+}
+
+/** Auto-miss notes that have passed */
+export function processMisses(state: GameState, now: number): { state: GameState; missed: boolean } {
+  let newState = state;
+  let missed = false;
+  while (newState.activeNote < newState.totalNotes && isNoteMissed(newState, newState.activeNote, now)) {
+    const step = newState.course.rotation[newState.activeNote];
+    const result: NoteResult = {
+      skillId: step.skillId,
+      timing: 'miss',
+      positionCorrect: false,
+      score: 0,
+    };
+    newState = {
+      ...newState,
+      activeNote: newState.activeNote + 1,
+      combo: 0,
+      results: [...newState.results, result],
+    };
+    missed = true;
+  }
+  return { state: newState, missed };
+}
+
+export function setPosition(state: GameState, pos: Position): GameState {
+  return { ...state, playerPosition: pos };
+}
+
+export function isGameOver(state: GameState): boolean {
+  return state.activeNote >= state.totalNotes;
 }
 
 export function getGrade(state: GameState): { grade: string; color: string } {
-  const ratio = state.score / (state.totalSteps * 1000);
-
-  if (ratio >= 1.5) return { grade: 'S', color: '#ffd700' };
-  if (ratio >= 1.2) return { grade: 'A', color: '#ff6644' };
-  if (ratio >= 0.9) return { grade: 'B', color: '#44aaff' };
-  if (ratio >= 0.6) return { grade: 'C', color: '#44cc44' };
-  return { grade: 'D', color: '#888888' };
+  const maxScore = state.totalNotes * 1000 * 2.5;
+  const ratio = state.score / maxScore;
+  if (ratio >= 0.45) return { grade: 'S', color: '#ff8fb1' };
+  if (ratio >= 0.35) return { grade: 'A', color: '#c4a1ff' };
+  if (ratio >= 0.25) return { grade: 'B', color: '#a1d4ff' };
+  if (ratio >= 0.15) return { grade: 'C', color: '#a1ffd4' };
+  return { grade: 'D', color: '#b8a9cc' };
 }
 
-export function getAccuracy(state: GameState): {
-  perfect: number;
-  great: number;
-  good: number;
-  miss: number;
-  positionalRate: number;
-} {
-  const results = state.results;
-  const perfect = results.filter(r => r.timing === 'perfect').length;
-  const great = results.filter(r => r.timing === 'great').length;
-  const good = results.filter(r => r.timing === 'good').length;
-  const miss = results.filter(r => r.timing === 'miss').length;
-
-  const gcdResults = results.filter((_, i) => !state.course.rotation[i]?.isOgcd);
-  const correctPositionals = gcdResults.filter(r => r.positionCorrect).length;
-  const positionalRate = gcdResults.length > 0 ? correctPositionals / gcdResults.length : 1;
-
-  return { perfect, great, good, miss, positionalRate };
+export function getAccuracy(state: GameState) {
+  const r = state.results;
+  return {
+    perfect: r.filter(x => x.timing === 'perfect').length,
+    great: r.filter(x => x.timing === 'great').length,
+    good: r.filter(x => x.timing === 'good').length,
+    miss: r.filter(x => x.timing === 'miss').length,
+    positionalRate: (() => {
+      const posSteps = state.course.rotation
+        .map((step, i) => ({ step, result: r[i] }))
+        .filter(({ step }) => allSkills[step.skillId]?.position);
+      if (posSteps.length === 0) return 1;
+      return posSteps.filter(({ result }) => result?.positionCorrect).length / posSteps.length;
+    })(),
+  };
 }

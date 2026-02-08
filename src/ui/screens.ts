@@ -1,11 +1,13 @@
 import { allCourses } from '../game/courses';
-import { gcdSkills, ogcdSkills } from '../game/skills';
-import type { Course, GameState, Skill } from '../game/types';
+import { allSkills } from '../game/skills';
+import type { Course, GameState, Skill, NoteResult } from '../game/types';
 import {
   createGameState,
-  getCurrentStep,
-  setPlayerPosition,
-  executeSkill,
+  noteProgress,
+  tapSkill,
+  processMisses,
+  setPosition,
+  isGameOver,
   getGrade,
   getAccuracy,
 } from '../game/engine';
@@ -14,11 +16,12 @@ import {
   showHitSpark,
   animateCombo,
   screenShake,
-  flashEnemy,
 } from './effects';
 
 let app: HTMLElement;
 let gameState: GameState | null = null;
+let animFrameId: number = 0;
+let countdownTimer: number = 0;
 
 export function initApp(root: HTMLElement) {
   app = root;
@@ -29,6 +32,7 @@ export function initApp(root: HTMLElement) {
 // Title Screen
 // ========================
 function showTitleScreen() {
+  cancelAnimationFrame(animFrameId);
   app.innerHTML = `
     <div class="screen title-screen">
       <div class="title-bg">
@@ -36,10 +40,10 @@ function showTitleScreen() {
           <span class="title-sub">FF14</span>
           <span class="title-main">モンク道場</span>
         </h1>
-        <p class="title-tagline">〜 スキル回し特訓 〜</p>
-        <div class="title-monk-icon">🐱</div>
+        <p class="title-tagline">〜 リズムでスキル回し特訓 〜</p>
+        <div class="title-monk-icon">🥊</div>
         <button class="btn-start" id="btn-start">おけいこ はじめる</button>
-        <p class="title-credit">Tap to master the Monk rotation!</p>
+        <p class="title-credit">Tap to the rhythm and master the Monk rotation!</p>
       </div>
     </div>
   `;
@@ -86,50 +90,52 @@ function showCourseSelect() {
 }
 
 // ========================
-// Game Screen
+// Game Screen - Rhythm Action
 // ========================
 function startGame(course: Course) {
   gameState = createGameState(course);
   renderGameScreen();
+  startCountdown();
+}
+
+function startCountdown() {
+  if (!gameState) return;
+  const countdownEl = document.getElementById('countdown');
+  if (!countdownEl) return;
+
+  let count = 3;
+  countdownEl.textContent = String(count);
+  countdownEl.classList.add('countdown-active');
+
+  countdownTimer = window.setInterval(() => {
+    count--;
+    if (count > 0) {
+      countdownEl.textContent = String(count);
+      countdownEl.classList.remove('countdown-pop');
+      void countdownEl.offsetWidth;
+      countdownEl.classList.add('countdown-pop');
+    } else if (count === 0) {
+      countdownEl.textContent = 'GO!';
+      countdownEl.classList.remove('countdown-pop');
+      void countdownEl.offsetWidth;
+      countdownEl.classList.add('countdown-pop');
+    } else {
+      clearInterval(countdownTimer);
+      countdownEl.classList.remove('countdown-active');
+      countdownEl.style.display = 'none';
+      if (gameState) {
+        gameState = { ...gameState, running: true, startTime: performance.now() };
+        startGameLoop();
+      }
+    }
+  }, 800);
 }
 
 function renderGameScreen() {
   if (!gameState) return;
-  const current = getCurrentStep(gameState);
-  if (!current || gameState.phase === 'finished') {
-    showResultScreen();
-    return;
-  }
+  cancelAnimationFrame(animFrameId);
 
-  const { step, skill } = current;
-  const isOgcd = step.isOgcd;
-  const progress = (gameState.currentStep / gameState.totalSteps) * 100;
-
-  // Determine which skills to show as buttons
-  let availableSkills: Skill[];
-  if (isOgcd) {
-    // Show relevant oGCDs + some distractors
-    availableSkills = getOgcdChoices(skill);
-  } else {
-    availableSkills = gcdSkills;
-  }
-
-  const positionPhase = gameState.phase === 'position';
-  const skillPhase = gameState.phase === 'skill';
-  const ogcdPhase = gameState.phase === 'ogcd';
-
-  // Position indicator text
-  let positionGuide = '';
-  if (skill.position) {
-    positionGuide = skill.position === 'rear' ? '背面(Rear)' : '側面(Flank)';
-  }
-
-  // Form display
-  const formNames: Record<string, string> = {
-    opoopo: 'オポオポの型',
-    raptor: '疾風の型',
-    coeurl: '金剛の型',
-  };
+  const skillButtons = getSkillButtons(gameState.course);
 
   app.innerHTML = `
     <div class="screen game-screen" id="game-container">
@@ -137,84 +143,41 @@ function renderGameScreen() {
       <div class="hud">
         <div class="hud-score">
           <span class="label">SCORE</span>
-          <span class="value" id="score-value">${gameState.score.toLocaleString()}</span>
+          <span class="value" id="score-value">0</span>
         </div>
         <div class="hud-combo" id="combo-display">
-          <span class="combo-count">${gameState.combo}</span>
+          <span class="combo-count" id="combo-count">0</span>
           <span class="combo-label">COMBO</span>
         </div>
       </div>
 
-      <!-- Progress bar -->
-      <div class="progress-bar">
-        <div class="progress-fill" style="width: ${progress}%"></div>
-        <span class="progress-text">${gameState.currentStep + 1} / ${gameState.totalSteps}</span>
+      <!-- Note lane -->
+      <div class="note-lane" id="note-lane">
+        <div class="hit-line" id="hit-line"></div>
+        <div class="note-container" id="note-container"></div>
       </div>
 
-      <!-- Current skill instruction -->
-      <div class="instruction-area">
-        ${!isOgcd && skill.form ? `<div class="form-badge form-${skill.form}">${formNames[skill.form]}</div>` : ''}
-        <div class="skill-prompt ${isOgcd ? 'ogcd-prompt' : ''}">
-          <span class="skill-icon-large">${skill.icon}</span>
-          <span class="skill-name-large">${skill.nameJa}</span>
-        </div>
-        ${!isOgcd && positionGuide ? `<div class="position-guide">→ ${positionGuide} ←</div>` : ''}
-        <div class="hint-text">${step.hint || ''}</div>
+      <!-- Timing feedback area -->
+      <div class="timing-feedback" id="timing-feedback"></div>
+
+      <!-- Position toggle -->
+      <div class="position-toggle" id="position-toggle">
+        <button class="pos-btn pos-rear selected" data-pos="rear" id="pos-rear">
+          <span class="pos-label">背面</span>
+          <span class="pos-sub">REAR</span>
+        </button>
+        <div class="pos-indicator" id="pos-indicator">🐱</div>
+        <button class="pos-btn pos-flank" data-pos="flank" id="pos-flank">
+          <span class="pos-label">側面</span>
+          <span class="pos-sub">FLANK</span>
+        </button>
       </div>
 
-      <!-- Enemy & Position Area -->
-      ${!isOgcd && positionPhase ? `
-      <div class="battle-area">
-        <div class="position-zone zone-flank-left zone-active ${gameState.playerPosition === 'flank' ? 'zone-selected' : ''}"
-             data-position="flank">
-          <span class="zone-label">側面</span>
-          <span class="zone-sublabel">FLANK</span>
-        </div>
-        <div class="enemy" id="enemy">
-          <div class="enemy-body">
-            <div class="enemy-face">🌸</div>
-            <div class="enemy-name">もくじん</div>
-          </div>
-          <div class="enemy-front-indicator">▲ まえ</div>
-        </div>
-        <div class="position-zone zone-flank-right zone-active ${gameState.playerPosition === 'flank' ? 'zone-selected' : ''}"
-             data-position="flank">
-          <span class="zone-label">側面</span>
-          <span class="zone-sublabel">FLANK</span>
-        </div>
-      </div>
-      <div class="rear-zone-row">
-        <div class="position-zone zone-rear zone-active ${gameState.playerPosition === 'rear' ? 'zone-selected' : ''}"
-             data-position="rear">
-          <span class="zone-label">背面</span>
-          <span class="zone-sublabel">REAR</span>
-        </div>
-      </div>
-      ` : `
-      <div class="battle-area ogcd-battle">
-        <div class="enemy" id="enemy">
-          <div class="enemy-body">
-            <div class="enemy-face">🌸</div>
-            <div class="enemy-name">もくじん</div>
-          </div>
-        </div>
-      </div>
-      `}
-
-      <!-- Phase instruction -->
-      <div class="phase-instruction">
-        ${positionPhase ? '<span class="phase-text blink">⬆ ポジションを選択！ ⬆</span>' : ''}
-        ${skillPhase ? '<span class="phase-text blink">⬇ スキルをタップ！ ⬇</span>' : ''}
-        ${ogcdPhase ? '<span class="phase-text blink ogcd-text">⬇ oGCDをタップ！ ⬇</span>' : ''}
-      </div>
-
-      <!-- Skill Buttons -->
-      <div class="skill-bar ${isOgcd ? 'ogcd-bar' : 'gcd-bar'}">
-        ${availableSkills.map(s => `
-          <button class="skill-btn ${s.id === skill.id ? '' : ''}"
-                  data-skill-id="${s.id}"
-                  style="background: ${s.color}20; border-color: ${s.color}"
-                  ${!skillPhase && !ogcdPhase ? 'disabled' : ''}>
+      <!-- Skill buttons -->
+      <div class="skill-bar rhythm-bar" id="skill-bar">
+        ${skillButtons.map(s => `
+          <button class="skill-btn rhythm-skill-btn" data-skill-id="${s.id}"
+                  style="border-color: ${s.color}">
             <span class="skill-btn-icon">${s.icon}</span>
             <span class="skill-btn-name">${s.nameJa}</span>
             ${s.position ? `<span class="skill-btn-pos">${s.position === 'rear' ? '背' : '側'}</span>` : ''}
@@ -222,106 +185,248 @@ function renderGameScreen() {
         `).join('')}
       </div>
 
-      <!-- Effects container -->
+      <!-- Countdown overlay -->
+      <div class="countdown-overlay" id="countdown">3</div>
+
+      <!-- Effects layer -->
       <div class="effects-layer" id="effects-layer"></div>
     </div>
   `;
 
-  // Bind events
-  bindGameEvents();
+  bindRhythmEvents();
 }
 
-function getOgcdChoices(correctSkill: Skill): Skill[] {
-  // Always include the correct skill + 2-3 distractors
-  const choices = [correctSkill];
-  const others = ogcdSkills.filter(s => s.id !== correctSkill.id);
-  // Shuffle and pick 3
-  const shuffled = others.sort(() => Math.random() - 0.5).slice(0, 3);
-  choices.push(...shuffled);
-  // Shuffle the final list
-  return choices.sort(() => Math.random() - 0.5);
+function getSkillButtons(course: Course): Skill[] {
+  // Collect unique skills from the course rotation
+  const skillIds = new Set<string>();
+  course.rotation.forEach(step => skillIds.add(step.skillId));
+
+  const gcdList: Skill[] = [];
+  const ogcdList: Skill[] = [];
+  skillIds.forEach(id => {
+    const skill = allSkills[id];
+    if (skill) {
+      if (skill.type === 'gcd') gcdList.push(skill);
+      else ogcdList.push(skill);
+    }
+  });
+
+  // Return GCDs first, then oGCDs
+  return [...gcdList, ...ogcdList];
 }
 
-function bindGameEvents() {
-  // Position zones
-  document.querySelectorAll('.position-zone').forEach(zone => {
-    zone.addEventListener('click', () => {
-      if (!gameState || gameState.phase !== 'position') return;
-      const position = (zone as HTMLElement).dataset.position as 'flank' | 'rear';
-      gameState = setPlayerPosition(gameState, position);
-      renderGameScreen();
+function bindRhythmEvents() {
+  // Position buttons
+  document.querySelectorAll('.pos-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!gameState) return;
+      const pos = (btn as HTMLElement).dataset.pos as 'flank' | 'rear';
+      gameState = setPosition(gameState, pos);
+      updatePositionUI();
     });
   });
 
   // Skill buttons
-  document.querySelectorAll('.skill-btn').forEach(btn => {
+  document.querySelectorAll('.rhythm-skill-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (!gameState) return;
-      if (gameState.phase !== 'skill' && gameState.phase !== 'ogcd') return;
-
+      if (!gameState || !gameState.running) return;
       const skillId = (btn as HTMLElement).dataset.skillId!;
-      const current = getCurrentStep(gameState);
-      if (!current) return;
-
-      const oldState = { ...gameState };
-      gameState = executeSkill(gameState, skillId);
-
-      // Show effects
-      const lastResult = gameState.results[gameState.results.length - 1];
-      if (lastResult) {
-        showEffects(lastResult, oldState);
-      }
-
-      // Small delay before rendering next step
-      setTimeout(() => {
-        renderGameScreen();
-      }, 400);
+      handleSkillTap(skillId);
     });
+
+    // Add visual feedback
+    btn.addEventListener('touchstart', () => {
+      (btn as HTMLElement).classList.add('btn-pressed');
+    }, { passive: true });
+    btn.addEventListener('touchend', () => {
+      (btn as HTMLElement).classList.remove('btn-pressed');
+    }, { passive: true });
   });
 }
 
-function showEffects(result: { timing: string; score: number; positionCorrect: boolean; potency: number }, _oldState: GameState) {
-  const container = document.getElementById('effects-layer');
-  const enemy = document.getElementById('enemy');
-  const comboDisplay = document.getElementById('combo-display');
-  const gameContainer = document.getElementById('game-container');
+function updatePositionUI() {
+  if (!gameState) return;
+  const rearBtn = document.getElementById('pos-rear');
+  const flankBtn = document.getElementById('pos-flank');
+  const indicator = document.getElementById('pos-indicator');
+  if (!rearBtn || !flankBtn || !indicator) return;
 
-  if (!container || !enemy || !gameContainer) return;
+  rearBtn.classList.toggle('selected', gameState.playerPosition === 'rear');
+  flankBtn.classList.toggle('selected', gameState.playerPosition === 'flank');
+  indicator.style.transform = gameState.playerPosition === 'flank' ? 'translateX(30px)' : 'translateX(-30px)';
+}
 
-  const enemyRect = enemy.getBoundingClientRect();
-  const containerRect = container.getBoundingClientRect();
+function handleSkillTap(skillId: string) {
+  if (!gameState || !gameState.running) return;
+  const now = performance.now();
 
-  const cx = enemyRect.left - containerRect.left + enemyRect.width / 2;
-  const cy = enemyRect.top - containerRect.top + enemyRect.height / 2;
+  const result = tapSkill(gameState, skillId, now);
+  gameState = result.state;
 
-  // Hit spark
-  showHitSpark(container, cx, cy, result.timing as any);
-
-  // Damage number
-  if (result.potency > 0) {
-    const dmgColor = result.timing === 'perfect' ? '#ff8fb1' : result.timing === 'great' ? '#c4a1ff' : '#b8a9cc';
-    showDamageNumber(container, result.potency, dmgColor, cx + (Math.random() - 0.5) * 40, cy - 30);
+  if (result.result) {
+    showTimingFeedback(result.result);
+    showRhythmEffects(result.result);
+    updateHUD();
   }
+
+  if (isGameOver(gameState)) {
+    cancelAnimationFrame(animFrameId);
+    setTimeout(() => showResultScreen(), 800);
+  }
+}
+
+function showTimingFeedback(result: NoteResult) {
+  const el = document.getElementById('timing-feedback');
+  if (!el) return;
+
+  const labels: Record<string, { text: string; cls: string }> = {
+    perfect: { text: 'PERFECT!!', cls: 'fb-perfect' },
+    great: { text: 'GREAT!', cls: 'fb-great' },
+    good: { text: 'GOOD', cls: 'fb-good' },
+    miss: { text: 'MISS...', cls: 'fb-miss' },
+  };
+
+  const info = labels[result.timing];
+  el.textContent = info.text;
+  el.className = 'timing-feedback ' + info.cls;
+  // Re-trigger animation
+  el.classList.remove('fb-animate');
+  void el.offsetWidth;
+  el.classList.add('fb-animate');
+
+  // Show positional result if applicable
+  const skill = allSkills[result.skillId];
+  if (skill?.position && result.timing !== 'miss') {
+    const posEl = document.createElement('div');
+    posEl.className = result.positionCorrect ? 'pos-feedback pos-ok' : 'pos-feedback pos-ng';
+    posEl.textContent = result.positionCorrect ? '方向OK!' : '方向NG...';
+    el.appendChild(posEl);
+  }
+}
+
+function showRhythmEffects(result: NoteResult) {
+  const container = document.getElementById('effects-layer');
+  const gameContainer = document.getElementById('game-container');
+  const comboDisplay = document.getElementById('combo-display');
+  if (!container || !gameContainer) return;
+
+  const hitLine = document.getElementById('hit-line');
+  if (!hitLine) return;
+
+  const hitRect = hitLine.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const cx = hitRect.left - containerRect.left + hitRect.width / 2;
+  const cy = hitRect.top - containerRect.top + hitRect.height / 2;
+
+  // Hit spark at the hit line
+  showHitSpark(container, cx, cy, result.timing);
 
   // Score popup
   if (result.score > 0) {
-    showDamageNumber(container, `+${result.score}`, '#c4a1ff', cx + 60, cy - 10);
+    showDamageNumber(container, `+${result.score}`, '#c4a1ff', cx + 40, cy - 20);
   }
 
-  // Screen shake on perfect/great
+  // Screen shake
   if (result.timing === 'perfect') {
     screenShake(gameContainer, 4);
-    flashEnemy(enemy, '#ff8fb1');
   } else if (result.timing === 'great') {
     screenShake(gameContainer, 2);
-    flashEnemy(enemy, '#c4a1ff');
-  } else if (result.timing === 'miss') {
-    flashEnemy(enemy, '#ff7b9c');
   }
 
-  // Combo animation
+  // Combo pop
   if (comboDisplay) {
     animateCombo(comboDisplay);
+  }
+}
+
+function updateHUD() {
+  if (!gameState) return;
+  const scoreEl = document.getElementById('score-value');
+  const comboEl = document.getElementById('combo-count');
+  if (scoreEl) scoreEl.textContent = gameState.score.toLocaleString();
+  if (comboEl) comboEl.textContent = String(gameState.combo);
+}
+
+// ========================
+// Game Loop
+// ========================
+function startGameLoop() {
+  function tick() {
+    if (!gameState || !gameState.running) return;
+    const now = performance.now();
+
+    // Process auto-misses
+    const missResult = processMisses(gameState, now);
+    if (missResult.missed) {
+      gameState = missResult.state;
+      updateHUD();
+      showTimingFeedback({ skillId: '', timing: 'miss', positionCorrect: false, score: 0 });
+    }
+
+    // Render notes
+    renderNotes(now);
+
+    // Check game over
+    if (isGameOver(gameState)) {
+      cancelAnimationFrame(animFrameId);
+      setTimeout(() => showResultScreen(), 800);
+      return;
+    }
+
+    animFrameId = requestAnimationFrame(tick);
+  }
+
+  animFrameId = requestAnimationFrame(tick);
+}
+
+function renderNotes(now: number) {
+  if (!gameState) return;
+  const container = document.getElementById('note-container');
+  const lane = document.getElementById('note-lane');
+  if (!container || !lane) return;
+
+  const laneWidth = lane.clientWidth;
+
+  // Clear old notes
+  container.innerHTML = '';
+
+  // Render visible notes
+  const visibleRange = 6; // show up to 6 notes ahead
+  const start = gameState.activeNote;
+  const end = Math.min(start + visibleRange, gameState.totalNotes);
+
+  for (let i = start; i < end; i++) {
+    const progress = noteProgress(gameState, i, now);
+    if (progress < 0) continue; // not yet visible
+    if (progress > 1.2) continue; // already past
+
+    const step = gameState.course.rotation[i];
+    const skill = allSkills[step.skillId];
+    if (!skill) continue;
+
+    // Note position: progress 0 = right edge, 1 = hit line (15% from left)
+    const hitLinePos = 0.15;
+    const xPct = hitLinePos + (1 - progress) * (1 - hitLinePos);
+    const xPx = xPct * laneWidth;
+
+    const note = document.createElement('div');
+    note.className = `note ${step.isOgcd ? 'note-ogcd' : 'note-gcd'} ${i === start ? 'note-active' : ''}`;
+    note.style.left = `${xPx}px`;
+    note.style.borderColor = skill.color;
+
+    // Flash when near hit line
+    if (progress > 0.85 && progress < 1.15) {
+      note.classList.add('note-ready');
+    }
+
+    note.innerHTML = `
+      <span class="note-icon">${skill.icon}</span>
+      <span class="note-name">${skill.nameJa}</span>
+      ${skill.position ? `<span class="note-pos ${skill.position === 'rear' ? 'note-pos-rear' : 'note-pos-flank'}">${skill.position === 'rear' ? '背' : '側'}</span>` : ''}
+      ${step.isOgcd ? '<span class="note-ogcd-badge">oGCD</span>' : ''}
+    `;
+
+    container.appendChild(note);
   }
 }
 
@@ -330,6 +435,7 @@ function showEffects(result: { timing: string; score: number; positionCorrect: b
 // ========================
 function showResultScreen() {
   if (!gameState) return;
+  cancelAnimationFrame(animFrameId);
 
   const { grade, color } = getGrade(gameState);
   const accuracy = getAccuracy(gameState);
@@ -361,6 +467,10 @@ function showResultScreen() {
         <div class="stat-row">
           <span class="stat-label">GREAT</span>
           <span class="stat-value great-color">${accuracy.great}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">GOOD</span>
+          <span class="stat-value">${accuracy.good}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">MISS</span>
