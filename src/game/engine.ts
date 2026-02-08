@@ -2,6 +2,8 @@ import type { GameState, Course, StepResult, Position } from './types';
 import { allSkills } from './skills';
 
 export function createGameState(course: Course): GameState {
+  const firstStep = course.rotation[0];
+  const firstSkill = allSkills[firstStep.skillId];
   return {
     course,
     currentStep: 0,
@@ -10,9 +12,15 @@ export function createGameState(course: Course): GameState {
     maxCombo: 0,
     results: [],
     playerPosition: null,
-    phase: course.rotation[0].isOgcd ? 'ogcd' : 'position',
+    phase: getPhaseForStep(firstStep, firstSkill),
     totalSteps: course.rotation.length,
   };
+}
+
+function getPhaseForStep(step: { skillId: string; isOgcd: boolean }, skill: { position?: Position }): GameState['phase'] {
+  if (step.isOgcd) return 'ogcd';
+  if (skill.position) return 'position';
+  return 'skill'; // GCD without positional → skip position selection
 }
 
 export function getCurrentStep(state: GameState) {
@@ -93,7 +101,8 @@ export function executeSkill(state: GameState, skillId: string): GameState {
     nextPhase = 'finished';
   } else {
     const nextStep = state.course.rotation[nextStepIndex];
-    nextPhase = nextStep.isOgcd ? 'ogcd' : 'position';
+    const nextSkill = allSkills[nextStep.skillId];
+    nextPhase = getPhaseForStep(nextStep, nextSkill);
   }
 
   return {

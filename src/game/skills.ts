@@ -1,80 +1,64 @@
 import type { Skill } from './types';
 
-// === GCD Skills (Dawntrail era Monk) ===
+// === GCD Skills (Dawntrail Lv100 Monk) ===
+// 7.0では方向指定は虎襲崩拳(側面)と破砕拳(背面)の2つのみ。
+// 功力システム: 双竜脚/双掌打/破砕拳 で功力を付与 → 猿舞連撃/竜頷正拳撃/虎襲崩拳 で消費
 
-// Opo-opo Form
-export const leapingOpo: Skill = {
-  id: 'leaping-opo',
-  name: 'Leaping Opo',
-  nameJa: 'リーピングオポオポ',
-  type: 'gcd',
-  form: 'opoopo',
-  position: 'rear',
-  potency: 260,
-  positionalBonus: 50,
-  icon: '🦶',
-  color: '#e85d3a',
-  description: '背面ボーナス。オポオポの型で使用。',
-};
-
+// Opo-opo Form (オポオポの型)
 export const dragonKick: Skill = {
   id: 'dragon-kick',
   name: 'Dragon Kick',
-  nameJa: 'ドラゴンキック',
+  nameJa: '双竜脚',
   type: 'gcd',
   form: 'opoopo',
-  position: 'flank',
-  potency: 260,
-  positionalBonus: 50,
+  potency: 320,
+  positionalBonus: 0,
   icon: '🐉',
   color: '#e8a33a',
-  description: '側面ボーナス。オポオポの型で使用。',
+  description: 'オポオポの型。壱の功力を付与。方向指定なし。',
 };
 
-// Raptor Form
-export const risingRaptor: Skill = {
-  id: 'rising-raptor',
-  name: 'Rising Raptor',
-  nameJa: 'ライジングラプター',
+export const leapingOpo: Skill = {
+  id: 'leaping-opo',
+  name: 'Leaping Opo',
+  nameJa: '猿舞連撃',
   type: 'gcd',
-  form: 'raptor',
-  position: 'rear',
+  form: 'opoopo',
   potency: 260,
-  positionalBonus: 50,
-  icon: '🦎',
-  color: '#3ae85d',
-  description: '背面ボーナス。疾風の型で使用。',
+  positionalBonus: 0,
+  icon: '🐵',
+  color: '#e85d3a',
+  description: 'オポオポの型。壱の功力で威力+100。方向指定なし。',
 };
 
+// Raptor Form (疾風の型)
 export const twinSnakes: Skill = {
   id: 'twin-snakes',
   name: 'Twin Snakes',
   nameJa: '双掌打',
   type: 'gcd',
   form: 'raptor',
-  position: 'flank',
-  potency: 260,
-  positionalBonus: 50,
+  potency: 280,
+  positionalBonus: 0,
   icon: '🐍',
   color: '#3ae8a3',
-  description: '側面ボーナス。疾風の型で使用。',
+  description: '疾風の型。弐の功力×2を付与。方向指定なし。',
 };
 
-// Coeurl Form
-export const pouncingCoeurl: Skill = {
-  id: 'pouncing-coeurl',
-  name: 'Pouncing Coeurl',
-  nameJa: 'ポウンシングクール',
+export const risingRaptor: Skill = {
+  id: 'rising-raptor',
+  name: 'Rising Raptor',
+  nameJa: '竜頷正拳撃',
   type: 'gcd',
-  form: 'coeurl',
-  position: 'flank',
+  form: 'raptor',
   potency: 260,
-  positionalBonus: 50,
-  icon: '🐆',
-  color: '#3a5de8',
-  description: '側面ボーナス。金剛の型で使用。',
+  positionalBonus: 0,
+  icon: '🦎',
+  color: '#3ae85d',
+  description: '疾風の型。弐の功力で威力+100。方向指定なし。',
 };
 
+// Coeurl Form (金剛の型)
 export const demolish: Skill = {
   id: 'demolish',
   name: 'Demolish',
@@ -82,11 +66,25 @@ export const demolish: Skill = {
   type: 'gcd',
   form: 'coeurl',
   position: 'rear',
-  potency: 260,
-  positionalBonus: 50,
+  potency: 280,
+  positionalBonus: 30,
   icon: '💥',
   color: '#a33ae8',
-  description: '背面ボーナス。金剛の型で使用。',
+  description: '金剛の型。参の功力×3を付与。【背面】ボーナスあり。',
+};
+
+export const pouncingCoeurl: Skill = {
+  id: 'pouncing-coeurl',
+  name: 'Pouncing Coeurl',
+  nameJa: '虎襲崩拳',
+  type: 'gcd',
+  form: 'coeurl',
+  position: 'flank',
+  potency: 260,
+  positionalBonus: 30,
+  icon: '🐆',
+  color: '#3a5de8',
+  description: '金剛の型。参の功力で威力+100。【側面】ボーナスあり。',
 };
 
 // === oGCD Skills ===
@@ -100,7 +98,7 @@ export const riddleOfFire: Skill = {
   positionalBonus: 0,
   icon: '🔥',
   color: '#ff4444',
-  description: 'ダメージ15%アップバフ。開幕で即使用。',
+  description: '与ダメージ15%アップ（20秒）。乾坤闘気弾が使用可能に。',
 };
 
 export const brotherhood: Skill = {
@@ -112,7 +110,7 @@ export const brotherhood: Skill = {
   positionalBonus: 0,
   icon: '🤝',
   color: '#ff8844',
-  description: 'PTメンバーのダメージアップ。',
+  description: 'PT全体の与ダメージアップ。120秒リキャスト。',
 };
 
 export const perfectBalance: Skill = {
@@ -124,7 +122,7 @@ export const perfectBalance: Skill = {
   positionalBonus: 0,
   icon: '⚖️',
   color: '#ffcc44',
-  description: '型の制約を無視して任意のWSを使用可能。',
+  description: '型の制約を無視して任意のWSを使用可能。必殺技の準備。',
 };
 
 export const theForb: Skill = {
@@ -136,7 +134,7 @@ export const theForb: Skill = {
   positionalBonus: 0,
   icon: '☯️',
   color: '#44ccff',
-  description: 'チャクラ5スタックで使用。高威力oGCD。',
+  description: 'チャクラ5スタックで使用。高威力アビリティ。',
 };
 
 export const riddleOfWind: Skill = {
@@ -148,55 +146,43 @@ export const riddleOfWind: Skill = {
   positionalBonus: 0,
   icon: '🌪️',
   color: '#44ff88',
-  description: 'オートアタック速度アップ。',
+  description: 'AA速度アップ（15秒）。絶空拳が使用可能に。',
 };
 
 export const elixirBurst: Skill = {
   id: 'elixir-burst',
   name: 'Elixir Burst',
-  nameJa: '蒼気砲',
+  nameJa: '真空波',
   type: 'ogcd',
   potency: 800,
   positionalBonus: 0,
   icon: '💎',
   color: '#4488ff',
-  description: '闘魂旋風脚の後に使用可能。高威力oGCD。',
+  description: '同じチャクラ×3で発動。陰の闘気を得る。',
 };
 
 export const firesReply: Skill = {
   id: 'fires-reply',
   name: "Fire's Reply",
-  nameJa: '業火の型',
+  nameJa: '乾坤闘気弾',
   type: 'ogcd',
   potency: 900,
   positionalBonus: 0,
   icon: '🌋',
   color: '#ff2222',
-  description: '紅蓮の極意の効果中に使用可能。',
+  description: '紅蓮の極意の後に使用可能。高威力WS。',
 };
 
 export const windsReply: Skill = {
   id: 'winds-reply',
   name: "Wind's Reply",
-  nameJa: '疾風の型',
+  nameJa: '絶空拳',
   type: 'ogcd',
   potency: 900,
   positionalBonus: 0,
   icon: '🌀',
   color: '#22ff88',
-  description: '疾風の極意の効果中に使用可能。',
-};
-
-export const elixirField: Skill = {
-  id: 'elixir-field',
-  name: 'Elixir Field',
-  nameJa: '蒼気法',
-  type: 'ogcd',
-  potency: 600,
-  positionalBonus: 0,
-  icon: '🟢',
-  color: '#22ccaa',
-  description: '闘魂旋風脚から派生。範囲攻撃。',
+  description: '疾風の極意の後に使用可能。高威力WS。',
 };
 
 export const risingPhoenix: Skill = {
@@ -208,7 +194,7 @@ export const risingPhoenix: Skill = {
   positionalBonus: 0,
   icon: '🦅',
   color: '#ff6622',
-  description: '紅蓮の鳳凰から派生。範囲攻撃。',
+  description: '異なるチャクラ×3で発動。陽の闘気を得る。',
 };
 
 export const phantomRush: Skill = {
@@ -220,7 +206,7 @@ export const phantomRush: Skill = {
   positionalBonus: 0,
   icon: '👻',
   color: '#cc44ff',
-  description: '闘魂旋風脚→鳳凰の舞→夢幻闘舞。最強フィニッシュ。',
+  description: '陰陽の闘気が揃うと発動。最強フィニッシュ技。',
 };
 
 // Skill registry
@@ -239,16 +225,15 @@ export const allSkills: Record<string, Skill> = {
   'elixir-burst': elixirBurst,
   'fires-reply': firesReply,
   'winds-reply': windsReply,
-  'elixir-field': elixirField,
   'rising-phoenix': risingPhoenix,
   'phantom-rush': phantomRush,
 };
 
 // GCD skills only (for positional practice)
 export const gcdSkills: Skill[] = [
-  leapingOpo, dragonKick,
-  risingRaptor, twinSnakes,
-  pouncingCoeurl, demolish,
+  dragonKick, leapingOpo,
+  twinSnakes, risingRaptor,
+  demolish, pouncingCoeurl,
 ];
 
 // oGCD skills
@@ -256,5 +241,5 @@ export const ogcdSkills: Skill[] = [
   riddleOfFire, brotherhood, perfectBalance,
   theForb, riddleOfWind, elixirBurst,
   firesReply, windsReply,
-  elixirField, risingPhoenix, phantomRush,
+  risingPhoenix, phantomRush,
 ];

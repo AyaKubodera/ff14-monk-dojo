@@ -37,8 +37,8 @@ function showTitleScreen() {
           <span class="title-main">モンク道場</span>
         </h1>
         <p class="title-tagline">〜 スキル回し特訓 〜</p>
-        <div class="title-monk-icon">🥋</div>
-        <button class="btn-start" id="btn-start">修行開始</button>
+        <div class="title-monk-icon">🐱</div>
+        <button class="btn-start" id="btn-start">おけいこ はじめる</button>
         <p class="title-credit">Tap to master the Monk rotation!</p>
       </div>
     </div>
@@ -162,29 +162,29 @@ function renderGameScreen() {
         <div class="hint-text">${step.hint || ''}</div>
       </div>
 
-      <!-- Enemy & Position Area (GCD only) -->
-      ${!isOgcd ? `
+      <!-- Enemy & Position Area -->
+      ${!isOgcd && positionPhase ? `
       <div class="battle-area">
-        <div class="position-zone zone-flank-left ${positionPhase ? 'zone-active' : ''} ${gameState.playerPosition === 'flank' ? 'zone-selected' : ''}"
+        <div class="position-zone zone-flank-left zone-active ${gameState.playerPosition === 'flank' ? 'zone-selected' : ''}"
              data-position="flank">
           <span class="zone-label">側面</span>
           <span class="zone-sublabel">FLANK</span>
         </div>
         <div class="enemy" id="enemy">
           <div class="enemy-body">
-            <div class="enemy-face">👹</div>
-            <div class="enemy-name">木人</div>
+            <div class="enemy-face">🌸</div>
+            <div class="enemy-name">もくじん</div>
           </div>
-          <div class="enemy-front-indicator">▲ 前方</div>
+          <div class="enemy-front-indicator">▲ まえ</div>
         </div>
-        <div class="position-zone zone-flank-right ${positionPhase ? 'zone-active' : ''} ${gameState.playerPosition === 'flank' ? 'zone-selected' : ''}"
+        <div class="position-zone zone-flank-right zone-active ${gameState.playerPosition === 'flank' ? 'zone-selected' : ''}"
              data-position="flank">
           <span class="zone-label">側面</span>
           <span class="zone-sublabel">FLANK</span>
         </div>
       </div>
       <div class="rear-zone-row">
-        <div class="position-zone zone-rear ${positionPhase ? 'zone-active' : ''} ${gameState.playerPosition === 'rear' ? 'zone-selected' : ''}"
+        <div class="position-zone zone-rear zone-active ${gameState.playerPosition === 'rear' ? 'zone-selected' : ''}"
              data-position="rear">
           <span class="zone-label">背面</span>
           <span class="zone-sublabel">REAR</span>
@@ -194,8 +194,8 @@ function renderGameScreen() {
       <div class="battle-area ogcd-battle">
         <div class="enemy" id="enemy">
           <div class="enemy-body">
-            <div class="enemy-face">👹</div>
-            <div class="enemy-name">木人</div>
+            <div class="enemy-face">🌸</div>
+            <div class="enemy-name">もくじん</div>
           </div>
         </div>
       </div>
@@ -299,24 +299,24 @@ function showEffects(result: { timing: string; score: number; positionCorrect: b
 
   // Damage number
   if (result.potency > 0) {
-    const dmgColor = result.timing === 'perfect' ? '#ffd700' : result.timing === 'great' ? '#ff8844' : '#ffffff';
+    const dmgColor = result.timing === 'perfect' ? '#ff8fb1' : result.timing === 'great' ? '#c4a1ff' : '#b8a9cc';
     showDamageNumber(container, result.potency, dmgColor, cx + (Math.random() - 0.5) * 40, cy - 30);
   }
 
   // Score popup
   if (result.score > 0) {
-    showDamageNumber(container, `+${result.score}`, '#00ff88', cx + 60, cy - 10);
+    showDamageNumber(container, `+${result.score}`, '#c4a1ff', cx + 60, cy - 10);
   }
 
   // Screen shake on perfect/great
   if (result.timing === 'perfect') {
-    screenShake(gameContainer, 6);
-    flashEnemy(enemy, '#ffd700');
+    screenShake(gameContainer, 4);
+    flashEnemy(enemy, '#ff8fb1');
   } else if (result.timing === 'great') {
-    screenShake(gameContainer, 3);
-    flashEnemy(enemy, '#ff8844');
+    screenShake(gameContainer, 2);
+    flashEnemy(enemy, '#c4a1ff');
   } else if (result.timing === 'miss') {
-    flashEnemy(enemy, '#ff0000');
+    flashEnemy(enemy, '#ff7b9c');
   }
 
   // Combo animation
